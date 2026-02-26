@@ -1,0 +1,88 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: yaprj-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root1234
+      MYSQL_DATABASE: yaprj
+      MYSQL_USER: test_admin
+      MYSQL_PASSWORD: 1111
+      TZ: Asia/Seoul
+    ports:
+      - "3307:3306"
+    volumes:
+      - ./database/mysql:/var/lib/mysql
+      - ./database/mysql-init:/docker-entrypoint-initdb.d
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "test_admin", "-p1111"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - yaprj-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: yaprj-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./database/redis:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - yaprj-network
+
+  backend:
+    build:
+      context: ./backend-spring
+      dockerfile: Dockerfile
+    container_name: yaprj-backend
+    platform: linux/arm64
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/yaprj?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+      - SPRING_DATASOURCE_USERNAME=test_admin
+      - SPRING_DATASOURCE_PASSWORD=1111
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
+      - APP_JWT_SECRET=sldiel3slFFos3klsipwcmdksldkkskf883kdqkdsdfDFsjklUYGKdsdfjkl
+      - APP_FRONTEND_URL=http://localhost:9000
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - yaprj-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: yaprj-frontend
+    platform: linux/arm64
+    restart: unless-stopped
+    ports:
+      - "9000:80"
+    depends_on:
+      - backend
+    networks:
+      - yaprj-network
+
+networks:
+  yaprj-network:
+    driver: bridge

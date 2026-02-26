@@ -1,0 +1,44 @@
+server:
+  port: 8000
+
+spring:
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+  
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://mysql:3306/yaprj?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8}
+    username: ${SPRING_DATASOURCE_USERNAME:test_admin}
+    password: ${SPRING_DATASOURCE_PASSWORD:1111}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+  
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:redis}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+
+app:
+  jwt:
+    secret: ${APP_JWT_SECRET:sldiel3slFFos3klsipwcmdksldkkskf883kdqkdsdfDFsjklUYGKdsdfjkl}
+    access-token-expiration: 900000
+    refresh-token-expiration: 604800000
+    admin-token-expiration: 86400000
+  
+  cors:
+    allowed-origins:
+      - http://localhost:3000
+      - http://localhost:9000
+  
+  frontend-url: ${APP_FRONTEND_URL:http://localhost:9000}
+
+logging:
+  level:
+    com.yaprj: INFO
+    org.hibernate.SQL: WARN

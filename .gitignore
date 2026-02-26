@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# Environment
+.env
+.env.local
+!.env.example
+
+# Build
+dist/
+build/
+*.egg-info/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+*.log
+
+# Testing
+coverage/
+.coverage
+.pytest_cache/
+
+# Database volumes (데이터 영속성 - git 제외)
+database/mysql/*
+!database/mysql/.gitkeep
+database/redis/*
+!database/redis/.gitkeep
+database/mysql-init/*.sql
+!database/mysql-init/01-init.sql
