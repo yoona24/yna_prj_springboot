@@ -15,7 +15,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/admin/auth")
 @RequiredArgsConstructor
-public class AdminAuthController {
+public class AdminAuthController { //관리자 기능
     
     private final AdminService adminService;
     
