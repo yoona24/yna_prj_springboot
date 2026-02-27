@@ -6,7 +6,7 @@ COPY . .
 
 RUN gradle build -x test --no-daemon
 
-FROM eclipse-temurin:17-jre
+FROM --platform=linux/amd64 eclipse-temurin:17-jre
 
 WORKDIR /app
 
