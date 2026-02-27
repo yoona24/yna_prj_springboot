@@ -73,13 +73,13 @@ services:
     build:
       context: ./frontend
       args:
-        - VITE_APP_API_URL=http://3.107.106.95:8000
+        - VITE_API_URL=http://3.107.106.95:8000
       dockerfile: Dockerfile
     container_name: yaprj-frontend
     platform: linux/arm64
     restart: unless-stopped
     environment:
-      - VITE_APP_API_URL=http://3.107.106.95:8000
+      - VITE_API_URL=http://3.107.106.95:8000
     ports:
       - "9000:80"
     depends_on:
