@@ -1,12 +1,9 @@
-name: Build and Deploy YA-PRJ
+name: Deploy YA-PRJ to EC2
 
 
 on:
  push:
    branches: [main, master]
- pull_request:
-   branches: [main, master]
-   types: [closed]
  workflow_dispatch:
 
 
@@ -17,148 +14,39 @@ env:
 
 
 jobs:
- # ========================================
- # 빌드 및 테스트 Job
- # ========================================
- build:
-   name: Build & Test
-   runs-on: ubuntu-latest
-
-   strategy:
-      matrix:
-        node-version: [20.x]
-  
-   steps:
-     - name: Checkout code
-       uses: actions/checkout@v4
-
-
-     # Frontend 빌드
-     - name: Setup Node.js
-       uses: actions/setup-node@v4
-       with:
-         node-version: ${{ matrix.node-version }}
-         cache: 'npm'
-         cache-dependency-path: app/frontend/package-lock.json
-
-
-     - name: Install frontend dependencies
-       working-directory: app/frontend
-       run: npm ci
-
-
-     - name: Lint frontend
-       working-directory: app/frontend
-       run: npm run lint --if-present
-       continue-on-error: true
-
-
-     - name: Build frontend
-       working-directory: app/frontend
-       env:
-         VITE_API_URL: http://${{ secrets.HOST }}:8000
-       run: npm run build
-
-
-     # Backend 빌드
-     - name: Setup Java
-       uses: actions/setup-java@v4
-       with:
-         java-version: '17'
-         distribution: 'temurin'
-         cache: 'gradle'
-
-
-     - name: Grant execute permission for gradlew
-       working-directory: app/backend-spring
-       run: chmod +x gradlew
-
-
-     - name: Build backend
-       working-directory: app/backend-spring
-       run: ./gradlew build -x test --no-daemon
-
-
-     - name: Run backend tests
-       working-directory: app/backend-spring
-       run: ./gradlew test --no-daemon
-       continue-on-error: true
-
-
-     # 빌드 아티팩트 업로드
-     - name: Upload frontend build
-       uses: actions/upload-artifact@v4
-       with:
-         name: frontend-dist
-         path: app/frontend/dist
-         retention-days: 1
-
-
-     - name: Upload backend build
-       uses: actions/upload-artifact@v4
-       with:
-         name: backend-jar
-         path: app/backend-spring/build/libs/*.jar
-         retention-days: 1
-
-
- # ========================================
- # 배포 Job
- # ========================================
  deploy:
    name: Deploy to EC2
    runs-on: ubuntu-latest
-   needs: build
-   if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true) || github.event_name == 'workflow_dispatch'
   
    steps:
      - name: Checkout code
        uses: actions/checkout@v4
 
 
-     - name: Download frontend build
-       uses: actions/download-artifact@v4
-       with:
-         name: frontend-dist
-         path: app/frontend/dist
-
-
-     - name: Download backend build
-       uses: actions/download-artifact@v4
-       with:
-         name: backend-jar
-         path: app/backend-spring/build/libs
-
-
-     # SSH 설정
+     # SSH 키 설정
      - name: Configure SSH
        run: |
         mkdir -p ~/.ssh
         echo "${{ secrets.PRIVATE_KEY }}" > ~/.ssh/id_rsa
         chmod 600 ~/.ssh/id_rsa
-        ssh-keyscan -H ${{ secrets.HOST }} >> ~/.ssh/known_hosts
+        ssh-keyscan -H ${{ env.EC2_HOST }} >> ~/.ssh/known_hosts
 
 
-     # 파일 동기화
-     - name: Sync files to EC2
+     # EC2에 배포
+     - name: Deploy to EC2
        run: |
-         rsync -avz --delete \
-          --exclude 'node_modules' \
-          --exclude '.git' \
-          --exclude '*.log' \
-          --exclude '.gradle' \
-          -e "ssh -o StrictHostKeyChecking=no" \
-          ./app/ ${{ env.EC2_USER }}@${{ secrets.HOST }}:${{ env.DEPLOY_PATH }}/app/
-
-
-     # Docker Compose 배포
-     - name: Deploy with Docker Compose
-       run: |
-          ssh -o StrictHostKeyChecking=no ${{ env.EC2_USER }}@${{ secrets.HOST }} << 'ENDSSH'
+         ssh -o StrictHostKeyChecking=no ${{ env.EC2_USER }}@${{ env.EC2_HOST }} << 'ENDSSH'
           echo "🚀 Starting deployment..."
-          cd /home/ubuntu/ya_prj/app
          
-          # 환경 변수 파일 생성
+          # 프로젝트 디렉토리로 이동
+          cd /home/ubuntu/ya_prj
+         
+          # Git 최신 코드 가져오기
+          git fetch origin
+          git reset --hard origin/main || git reset --hard origin/master
+         
+          # 환경 변수 설정
+          cd app
           cat > .env << EOF
           KAKAO_CLIENT_ID=${{ secrets.KAKAO_CLIENT_ID }}
           KAKAO_CLIENT_SECRET=${{ secrets.KAKAO_CLIENT_SECRET }}
@@ -168,13 +56,12 @@ jobs:
           GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
           EOF
          
-          # 이전 컨테이너 정리 및 재시작
+          # Docker Compose로 재배포
           docker-compose down --remove-orphans 2>/dev/null || true
-          docker system prune -f 2>/dev/null || true
           docker-compose up -d --build
          
-          # 상태 확인
-          sleep 5
+          # 컨테이너 상태 확인
+          echo "📦 Container Status:"
           docker-compose ps
          
           echo "✅ Deployment completed!"
@@ -184,62 +71,11 @@ jobs:
      # 헬스 체크
      - name: Health Check
        run: |
-         echo "⏳ Waiting for services to start..."
-         sleep 30
+        echo "⏳ Waiting for services..."
+        sleep 20
        
-         echo "🔍 Backend health check..."
-         for i in {1..5}; do
-          if curl -sf http://${{ secrets.HOST }}:8000/api/v1/health; then
-            echo "✅ Backend is healthy!"
-            break
-          fi
-          echo "Retry $i..."
-          sleep 5
-         done
+        echo "🔍 Checking backend..."
+        curl -sf http://${{ env.EC2_HOST }}:8000/api/v1/health && echo "✅ Backend OK" || echo "⚠️ Backend check failed"
        
-         echo "🔍 Frontend health check..."
-         curl -sf http://${{ secrets.HOST }}:9000 && echo "✅ Frontend is healthy!" || echo "⚠️ Frontend check failed"
-
-
-     # 배포 완료 알림
-     - name: Deployment Summary
-       run: |
-        echo "============================================"
-        echo "🎉 Deployment Completed Successfully!"
-        echo "============================================"
-        
-
- # ========================================
- # 롤백 Job (배포 실패 시)
- # ========================================
- rollback:
-   name: Rollback on Failure
-   runs-on: ubuntu-latest
-   needs: deploy
-   if: failure()
-  
-   steps:
-     - name: Configure SSH
-       run: |
-        mkdir -p ~/.ssh
-        echo "${{ secrets.PRIVATE_KEY }}" > ~/.ssh/id_rsa
-        chmod 600 ~/.ssh/id_rsa
-        ssh-keyscan -H ${{ secrets.HOST }} >> ~/.ssh/known_hosts
-
-
-     - name: Rollback
-       run: |
-         ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.HOST }} << 'ENDSSH'
-         echo "⚠️ Deployment failed! Attempting rollback..."
-         cd /home/ubuntu/ya_prj
-         
-         # 이전 커밋으로 롤백
-         git reset --hard HEAD~1
-         
-         # 재배포
-         cd app
-         docker-compose down --remove-orphans || true
-         docker-compose up -d --build
-         
-         echo "🔄 Rollback completed!"
-         ENDSSH
+        echo "🔍 Checking frontend..."
+        curl -sf http://${{ env.EC2_HOST }}:9000 && echo "✅ Frontend OK" || echo "⚠️ Frontend check failed"
