@@ -60,7 +60,7 @@ services:
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
       - APP_JWT_SECRET=sldiel3slFFos3klsipwcmdksldkkskf883kdqkdsdfDFsjklUYGKdsdfjkl
-      - APP_FRONTEND_URL=http://localhost:9000
+      - APP_FRONTEND_URL=http://3.107.106.95:9000
     depends_on:
       mysql:
         condition: service_healthy
@@ -72,10 +72,14 @@ services:
   frontend:
     build:
       context: ./frontend
+      args:
+        - VITE_APP_API_URL=http://3.107.106.95:8000
       dockerfile: Dockerfile
     container_name: yaprj-frontend
     platform: linux/arm64
     restart: unless-stopped
+    environment:
+      - VITE_APP_API_URL=http://3.107.106.95:8000
     ports:
       - "9000:80"
     depends_on:
